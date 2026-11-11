@@ -81,6 +81,7 @@ class FailedResponseTableRecord(TypedDict):
     expected_answer: str
     error: str
 
+
 class QuestionRecord(TypedDict):
     "A record read from the questions yaml file."
 

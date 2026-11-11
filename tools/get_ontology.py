@@ -5,7 +5,7 @@ The tool reads a document written in the Neo4j Ontology Graph Specification
 (https://github.com/neo4j/ontology-graph-spec) and returns a compact "schema card"
 of the whole domain, or of a sub-schema covering only the entities the agent asked for.
 
-Compared with the Cypher MCP server's `get_neo4j_schema`, this tells the model:
+Compared with the Neo4j MCP server's `get-schema`, this tells the model:
 * what each label, relationship type and property means (descriptions, aliases),
 * how many relationships each end has (cardinality),
 * which values a property may take (`one_of` / `pattern`).

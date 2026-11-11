@@ -2,9 +2,9 @@
 
 This repo provides a simple example of how to build a ReAct agent with MCP and local tools. 
 
-Specifically this repo builds a [Text2Cypher](https://graphrag.com/reference/graphrag/text2cypher/) ReAct agent with the [Neo4j Cypher MCP Server](https://github.com/neo4j-contrib/mcp-neo4j/tree/main/servers/mcp-neo4j-cypher). The agent also has extended capabilities by exposing local tools for it to use.
+Specifically this repo builds a [Text2Cypher](https://graphrag.com/reference/graphrag/text2cypher/) ReAct agent with the [official Neo4j MCP Server](https://github.com/neo4j/mcp). The agent also has extended capabilities by exposing local tools for it to use.
 
-A conversational AI agent that connects to a Neo4j Movies database and can answer movie-related questions using natural language. Built with LangGraph's implementation of a ReAct agent, the Neo4j Cypher MCP server, and a custom movie recommendations tool.
+A conversational AI agent that connects to a Neo4j Movies database and can answer movie-related questions using natural language. Built with LangGraph's implementation of a ReAct agent, the official Neo4j MCP server, and a custom movie recommendations tool.
 
 ## Features
 
@@ -16,7 +16,7 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 
 ## Prerequisites
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - Neo4j Aura account or local Neo4j instance with Movies database
 - OpenAI API key
 - `uv` package manager (recommended) or `pip`
@@ -80,17 +80,17 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 
 ## Agent Components
 
-### Core Agent (`agent.py`)
+### Core Agent (`single_file_agent.py`)
 - **LangGraph ReAct Agent**: Implements reasoning and acting loops for complex queries
-- **Neo4j Cypher MCP Server**: Provides schema introspection and query execution
+- **Neo4j MCP Server** (official): Provides schema introspection and query execution
 - **Custom Recommendations Tool**: Custom tool for movie recs
 - **Ontology Tool**: Custom tool exposing the domain ontology to the agent
 - **Interactive CLI**: Command-line chat interface
 
 ### Key Tools Available to the Agent
 
-1. **`get_neo4j_schema`**: Retrieves database schema for informed query writing
-2. **`read_neo4j_cypher`**: Executes read-only Cypher queries against the database  
+1. **`get-schema`**: Retrieves database schema for informed query writing
+2. **`read-cypher`**: Executes read-only Cypher queries against the database  
 3. **`find_movie_recommendations`**: Custom recommendation engine that finds movies liked by users who also enjoyed a target movie
 4. **`get_ontology`**: Retrieves the domain ontology — what labels, relationship types and properties *mean* — as a compact schema card (see below)
 
@@ -98,28 +98,35 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 
 ### Why add an ontology?
 
-`get_neo4j_schema` returns the **structure** of the graph, inferred from a data sample: labels,
+`get-schema` returns the **structure** of the graph, inferred from a data sample: labels,
 relationship types, property names and types, and whether a property is indexed. It does not
 tell the model what any of it **means**. An ontology does, and that difference shows up directly
 in the Cypher the agent writes:
 
-| The model needs to know | `get_neo4j_schema` | Ontology |
+| The model needs to know | `get-schema` | Ontology |
 |---|---|---|
-| What does `imdbRating` mean? Is `budget` in USD? | ❌ | ✅ `description` |
-| The user says "actor" — is there an `Actor` label? | ❌ no label in the data → the query silently matches nothing | ✅ `aliases: [Actor, Performer]` → `Person` |
-| Which `rating` does the question mean? | ❌ two relationships both have `rating` | ✅ `RATED` (User→Movie, 0.5–5) vs `REVIEWED` (Person→Movie, 0–100) |
-| Can a movie have zero actors? | ❌ | ✅ `ACTED_IN` has `min_count: 1` at the Movie end |
-| Which values are legal? | ❌ a sample only shows observed values | ✅ `one_of`, `pattern`, constraints |
+| Is `budget` in dollars? Is `imdbRating` 0–10 or 0–100? | ❌ just `INTEGER` / `FLOAT` | ✅ `description` ("Production budget in US dollars", "0.0 to 10.0") |
+| The user says "performer" — which label is that? | ❌ no `Performer` label in the data → the query silently matches nothing | ✅ `aliases: [Actor, Performer, Director, Filmmaker]` → `Person` |
+| What is a `rating` worth? | ❌ just `FLOAT` | ✅ "Rating from 0.5 to 5.0 in half-star increments" — so "5-star" means `rating = 5.0` |
+| What is `timestamp` on a rating? | ❌ just `INTEGER` | ✅ "Unix epoch seconds when the rating was given" |
+| Does every movie have a genre? | ❌ | ✅ `IN_GENRE` has `min_count: 1` at the Genre end — so a query can rely on it |
 | How is a title with "The" stored? | ❌ | ✅ "`Title, The`" |
 | What data exists right now (values, counts)? | ✅ | ❌ |
 
-Concretely, for the question *"Which actors appeared in the most movies?"* the schema-only
-agent sees no `Actor` label and must guess — typically producing `MATCH (a:Actor)` and an empty
-result, or a second schema round-trip to reason its way to `Person`. The ontology card says
-`Person (aliases: Actor, Performer, Director, Filmmaker)` up front, so the first query is
-`MATCH (p:Person)-[:ACTED_IN]->(:Movie)`. Same for *"What is the average rating of Tom Hanks'
-films?"* — with two `rating` relationships in the schema, the ontology's descriptions are what
-tell the model which one the question is about.
+Concretely, for the question *"Which movies had a production budget of at least 300 million
+dollars?"* the schema-only agent sees `budget: INTEGER` and must work out the unit — is the value
+in millions or dollars? It either guesses or spends an extra `read-cypher` query sampling values.
+The ontology card says "Production budget in US dollars", so the first query is
+`WHERE m.budget >= 300000000`. Same for *"Which performers acted in 'The Matrix'?"* — the
+ontology resolves "performer" to `Person` and documents the `'Title, The'` convention, so the
+query matches `Matrix, The` without a discovery round-trip.
+
+Every claim in this ontology is verified against the actual database: `Actor` and `Director`
+exist as secondary labels on `Person`, relationships absent from the data (`REVIEWED`,
+`PRODUCED`, `WROTE`, `FOLLOWS`) are deliberately not declared, and each cardinality was checked
+with a `NOT EXISTS` query (41 movies have no actor and 55 no director, so `min_count` is 0 for
+both; every movie has at least one genre). An ontology that invents structure the data does not
+have would mislead the agent — faithfulness is part of what makes it a governed artifact.
 
 The ontology is also a **governed artifact**: it is written down, versionable, reviewable and
 validatable against a published JSON Schema, rather than inferred differently on every call.
@@ -145,7 +152,7 @@ A card looks like this (excerpt):
 
 ```markdown
 ### Person (aliases: Actor, Performer, Director, Filmmaker)
-A person in the film industry.
+A person in the film industry. The same nodes also carry the secondary labels Actor and Director.
 Properties:
 - name: STRING (key) - Full name.
 - born: INTEGER - Year of birth.
@@ -155,17 +162,68 @@ A user rated a film.
 Cardinality: min 0 at User end, min 0 at Movie end
 Properties:
 - rating: FLOAT - Rating from 0.5 to 5.0 in half-star increments.
-- datetime: ZONED DATETIME - When the rating was given.
+- timestamp: INTEGER - Unix epoch seconds when the rating was given.
 ```
 
 **How the agent chooses between the two tools:** it is instructed to prefer `get_ontology` for
-schema context, and to fall back to `get_neo4j_schema` only when the ontology has no matching
+schema context, and to fall back to `get-schema` only when the ontology has no matching
 entity (the tool's response lists what is available), or when the question depends on
 data-dependent facts the ontology cannot know — actual values, populated properties, counts.
 
+### What we measured
+
+This repo is template code: it shows how to add an ontology to a text2cypher agent, and how to
+measure what it changes. On our 16-question benchmark the answers are **roughly the same with and
+without the ontology** — a capable model answers most of these questions correctly from the raw
+schema. What differs is the path to the answer: on questions where units, aliases or storage
+conventions matter, the ontology agent asks fewer follow-up queries because it does not have to
+discover those facts by sampling the data. On the six questions written to probe exactly that,
+the ontology run used about 2 tool calls and 8 s per question versus about 3 calls and 21 s
+without it (two runs, small sample — directional, not a benchmark claim). RAGAS factual
+correctness was too noisy on list-style answers to lead with, so we don't.
+
+If your domain has many entities, ambiguous property names, or vocabulary your users do not share
+with the database, an ontology is worth trying. If your schema is small and self-explanatory, the
+raw schema may be all you need — this example gives you both configurations so you can measure it
+on your own questions.
+
+### Pros and cons
+
+Not every benefit below is measured by the eval in this repo — this is template code, so treat them
+as things to evaluate for your own domain.
+
+**Pros**
+
+- **The agent knows what things mean.** Units, scales and formats are written down ("budget in US
+  dollars", "imdbRating 0–10", titles stored as `Title, The`), so it guesses less and needs fewer
+  exploratory queries.
+- **Your users' words map to your data.** Aliases resolve "performer" or "filmmaker" to `Person`.
+- **A written, reviewed artifact.** It lives in version control, is validated against the published
+  JSON Schema, and returns the same answer every run — unlike a schema inferred from a data sample.
+- **Works on an empty or sparse database.** The model is declared, not observed, so it is there on
+  day one and for properties or relationships a sample would miss.
+- **Scales to large graphs.** The `entities` parameter fetches only the part of the ontology a
+  question needs, keeping the context small when the full model is big.
+- **Can act as a guardrail.** Allowed values, patterns and cardinality can be used to check
+  generated queries before they run (`rating` can't exceed 5.0, only declared properties exist).
+- **Shared by other tools.** One file can serve several agents, BI tools and documentation, so they
+  cannot drift apart.
+
+**Cons**
+
+- **Someone has to maintain it.** The ontology must stay faithful to the data. One that invents
+  relationships or wrong cardinalities actively misleads the agent — we hit exactly this with our
+  first draft and had to correct it against the database.
+- **It is another thing to govern.** Changes need review, and schema changes have to be reflected
+  in two places (the database and the ontology).
+- **It may not pay off.** For small, self-explanatory schemas the raw schema is enough; in our
+  measurements the answers were about the same with and without it.
+- **The tooling is early.** The specification is new (1.1.0), and reading the ontology from the
+  database (`source="db"`) is not available yet — today it is a file you point the agent at.
+
 To adapt this to your own domain, write your ontology in the [specification format](https://github.com/neo4j/ontology-graph-spec) (validate it against the published JSON Schema), point `ONTOLOGY_FILE` at it, and the agent picks it up — no other code changes needed.
 
-The evaluation suite makes it easy to measure the difference: add or remove `get_ontology` from the tools in `evaluation/main.py`, run `make run-eval`, and compare the RAGAS scores with and without ontology context.
+The evaluation suite makes it easy to measure the difference: run it once with `WITH_ONTOLOGY=true` (default) and once with `WITH_ONTOLOGY=false`, then compare the results. Results land in `evals/output/eval_run_<timestamp>_<ontology|no_ontology>/`.
 
 ## Running the Agent
 
@@ -210,22 +268,18 @@ The evaluation suite includes three RAGAS metrics:
 
 ### Running Evaluations
 
-1. Configure the [eval.py](eval.py) file with the LLM name, tools and prompt you would like to use
-2. Ensure you have populated the `questions.yaml` file with your eval question set
+1. Populate the `questions.yaml` file with your eval question set
+2. Configure the model and the tools in [evaluation/main.py](evaluation/main.py) if needed
+   (`OPENAI_MODEL`, `JUDGE_MODEL` and `WITH_ONTOLOGY` are read from `.env`)
 3. Run evaluations:
    ```bash
    make run-eval-uv  # Using uv
    # or
    make run-eval     # Using pip
    ```
-4. The eval results CSV will be saved to `evals/output/eval_benchmark_results_<timestamp>.csv`
+4. The results are written to `evals/output/eval_run_<timestamp>_<ontology|no_ontology>/`:
+   `metadata.csv`, `agent_response.csv`, `failed_response.csv` and a `report.txt`
 5. View and analyze the results with [review.ipynb](review.ipynb)
-6. Generate a text report:
-   ```bash
-   make generate-report-uv csv-name=<file-name>  # Using uv
-   # or
-   make generate-report csv-name=<file-name>     # Using pip
-   ```
 
 **NOTE**: The evaluation script may take awhile to run depending on the number of questions and length of resulting conversations
 
@@ -295,10 +349,10 @@ make format
 
 **MCP Server Issues:**
 - Ensure `uvx` is available in your PATH
-- The agent automatically installs `mcp-neo4j-cypher@0.3.0` via uvx
+- The agent automatically installs the official `neo4j-mcp-server@2.1.1` via uvx
 
 **Python Issues:**
-- Ensure Python 3.10+ is installed
+- Ensure Python 3.11+ is installed
 - Try recreating your virtual environment if using pip
 
 ## License

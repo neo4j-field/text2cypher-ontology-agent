@@ -1,5 +1,6 @@
 from evaluation.models import FailedResponseTableRecord
 
+
 def create_failed_response_record(
     question_id: str,
     question: str,

@@ -12,10 +12,12 @@ BAR = "================================================"
 EVALS_PATH = "evals/output/"
 
 
-def create_report_header(title: str, main_df: pd.DataFrame, failed_response_df: pd.DataFrame) -> str:
+def create_report_header(
+    title: str, main_df: pd.DataFrame, failed_response_df: pd.DataFrame
+) -> str:
     """
     Create a header for the report.
-    
+
     Parameters
     ----------
     title : str
@@ -33,7 +35,7 @@ def create_report_header(title: str, main_df: pd.DataFrame, failed_response_df: 
     header = ""
     header += f"{title}" + NEWLINE + NEWLINE
     header += f"Total Questions: {len(main_df)}" + NEWLINE
-    header += f"Total Failed Questions: {len(failed_response_df)}" + NEWLINE 
+    header += f"Total Failed Questions: {len(failed_response_df)}" + NEWLINE
     if not failed_response_df.empty:
         header += "Failed Question IDs:" + NEWLINE
         header += NEWLINE.join(failed_response_df["question_id"].tolist()) + NEWLINE + NEWLINE
@@ -41,6 +43,7 @@ def create_report_header(title: str, main_df: pd.DataFrame, failed_response_df: 
     header += BAR
     header += NEWLINE
     return header
+
 
 def create_report_str_from_row(row: dict[str, Any]) -> str:
     row_report = f"Question: {row['question']}" + NEWLINE
@@ -58,7 +61,7 @@ def create_report_str_from_row(row: dict[str, Any]) -> str:
     if row["generated_cypher"]:
         row_report += NEWLINE
         row_report += f"Text2Cypher Queries:\n{NEWLINE.join([f'{idx + 1}.)' + NEWLINE + cypher.get('query') for idx, cypher in enumerate(row['generated_cypher'])])}\n"
-    
+
     # Add evaluation metrics
     row_report += NEWLINE
     row_report += "Evaluation Metrics:" + NEWLINE
@@ -70,7 +73,7 @@ def create_report_str_from_row(row: dict[str, Any]) -> str:
 
     # Add errors if they exist
     if not pd.isna(row["agent_response_error"]) or not pd.isna(row["metadata_error"]):
-        row_report += f"Errors:" + NEWLINE
+        row_report += "Errors:" + NEWLINE
         if not pd.isna(row["agent_response_error"]):
             row_report += f"Agent Response Error: {row['agent_response_error']}" + NEWLINE
         if not pd.isna(row["metadata_error"]):
@@ -101,11 +104,16 @@ def _create_report_str(title: str, main_df: pd.DataFrame, failed_response_df: pd
     return report
 
 
-def create_report_from_dataframes(title: str, agent_response_df: pd.DataFrame, metadata_df: pd.DataFrame, failed_response_df: pd.DataFrame) -> str:
+def create_report_from_dataframes(
+    title: str,
+    agent_response_df: pd.DataFrame,
+    metadata_df: pd.DataFrame,
+    failed_response_df: pd.DataFrame,
+) -> str:
     """
-    Generate a report from a collection of evaluation results DataFrames. 
+    Generate a report from a collection of evaluation results DataFrames.
     These DataFrames should be the unaltered output of the evaluation workflow.
-    
+
     Parameters
     ----------
     title : str
@@ -123,15 +131,22 @@ def create_report_from_dataframes(title: str, agent_response_df: pd.DataFrame, m
         The report string.
     """
 
-    main_df = pd.merge(agent_response_df[["question_id", 
-                                          "rouge_f1_score", 
-                                          "factual_correctness_f1_score", 
-                                          "answer_relevancy_score", 
-                                          "error"]].rename(columns={"error": "agent_response_error"}), 
-                                          metadata_df.rename(columns={"error": "metadata_error"}), 
-                                          on="question_id")
-    
+    main_df = pd.merge(
+        agent_response_df[
+            [
+                "question_id",
+                "rouge_f1_score",
+                "factual_correctness_f1_score",
+                "answer_relevancy_score",
+                "error",
+            ]
+        ].rename(columns={"error": "agent_response_error"}),
+        metadata_df.rename(columns={"error": "metadata_error"}),
+        on="question_id",
+    )
+
     return _create_report_str(title, main_df, failed_response_df)
+
 
 def create_report_from_directory(title: str, directory_path: str) -> str:
     """
@@ -150,20 +165,23 @@ def create_report_from_directory(title: str, directory_path: str) -> str:
         The report string.
     """
     agent_response_df = pd.read_csv(os.path.join(directory_path, "agent_response.csv"))
-    metadata_df = pd.read_csv(os.path.join(directory_path, "metadata.csv"), converters={
+    metadata_df = pd.read_csv(
+        os.path.join(directory_path, "metadata.csv"),
+        converters={
             "generated_cypher": literal_eval,
             "called_tools": literal_eval,
-        })
+        },
+    )
     failed_response_df = pd.read_csv(os.path.join(directory_path, "failed_response.csv"))
 
     return create_report_from_dataframes(title, agent_response_df, metadata_df, failed_response_df)
-    
 
 
 def get_most_recent_eval_run_directory() -> str:
     """Get the most recent evaluation run directory."""
     eval_runs = [
-        x for x in os.listdir(EVALS_PATH)
+        x
+        for x in os.listdir(EVALS_PATH)
         if x.startswith("eval_run_") and os.path.isdir(os.path.join(EVALS_PATH, x))
     ]
     if not eval_runs:

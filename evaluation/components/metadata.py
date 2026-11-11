@@ -3,6 +3,7 @@ from typing import Any, Optional
 from langchain_core.messages import AIMessage
 
 from evaluation.models import MetadataTableRecord
+from utils import message_text
 
 
 async def create_metadata_record(
@@ -29,13 +30,13 @@ async def create_metadata_record(
         ]
 
         # capture all text2cypher queries
-        cyphers = [c.get("args") for c in tool_calls if c.get("name") == "read_neo4j_cypher"]
+        cyphers = [c.get("args") for c in tool_calls if c.get("name") == "read-cypher"]
 
         return MetadataTableRecord(
             question_id=question_id,
             question=question,
             expected_answer=expected_answer,
-            agent_final_answer=agent_response["messages"][-1].content,
+            agent_final_answer=message_text(agent_response["messages"][-1]),
             generated_cypher=cyphers,
             model=model,
             available_tools=available_tools,

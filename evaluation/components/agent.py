@@ -7,6 +7,7 @@ from ragas.metrics._factual_correctness import FactualCorrectness
 from ragas.metrics.collections import AnswerRelevancy, RougeScore
 from dotenv import load_dotenv
 from evaluation.models import AgentResponseTableRecord
+from llm import get_judge_model
 
 if load_dotenv():
     print("Loaded .env file")
@@ -14,13 +15,20 @@ else:
     print("No .env file found")
 
 # we will use this LLM as a judge in our evaluations that don't require structured output
-evaluator_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+evaluator_llm = ChatOpenAI(model=get_judge_model(), use_responses_api=True)
 
 # Setup LLM and embeddings for answer relevancy - this eval requires structured output from the evaluator LLM
+# Ragas uses Chat Completions function tools, which GPT-6 models only support
+# with reasoning disabled (use the Responses API otherwise).
 client = AsyncOpenAI()
-evaluator_llm_structured_output = llm_factory("gpt-4o-mini", client=client)
+evaluator_llm_structured_output = llm_factory(
+    get_judge_model(), client=client, reasoning_effort="none"
+)
 embeddings = embedding_factory(
-    "openai", model="text-embedding-3-small", client=client, interface="modern"
+    "openai",
+    model="text-embedding-3-small",
+    client=client,
+    interface="modern",
 )
 
 # https://docs.ragas.io/en/stable/concepts/metrics/available_metrics/traditional/#rouge-score
@@ -51,7 +59,9 @@ async def create_agent_response_record(
     """
 
     try:
-        rouge_score = await rouge_scorer.ascore(reference=expected_answer, response=agent_final_answer)
+        rouge_score = await rouge_scorer.ascore(
+            reference=expected_answer, response=agent_final_answer
+        )
 
         sample = SingleTurnSample(
             response=agent_final_answer,

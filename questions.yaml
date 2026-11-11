@@ -40,3 +40,30 @@ questions:
   - question: "What are the detailed production costs broken down by department for each movie?"
     answer: "Cannot be answered - database only has total budget, not detailed production cost breakdowns."
     id: "production_cost_breakdown"
+
+  # ONTOLOGY-FOCUSED QUESTIONS (added by this fork) - each probes a fact the raw
+  # schema cannot provide: title storage format, rating scales, cardinality,
+  # and unit semantics. Ground truth verified against the demo database.
+  - question: "Which performers acted in the movie 'The Matrix'?"
+    answer: "Keanu Reeves, Laurence Fishburne, Carrie-Anne Moss and Hugo Weaving acted in The Matrix (1999)."
+    id: "matrix_cast"
+
+  - question: "What is the average user rating for the movie 'The Matrix'?"
+    answer: "The average user rating is 4.18 out of 5, based on 259 ratings."
+    id: "matrix_avg_user_rating"
+
+  - question: "How many users gave the movie 'The Matrix' a 5-star rating?"
+    answer: "95 users rated The Matrix 5.0, the maximum on the 0.5 to 5.0 half-star scale."
+    id: "matrix_five_star_count"
+
+  - question: "Are there any movies that don't belong to any genre?"
+    answer: "No - every movie in the database has at least one genre (0 movies without a genre)."
+    id: "movies_without_genre"
+
+  - question: "Which movies had a production budget of at least 300 million dollars?"
+    answer: "1. Pirates of the Caribbean: On Stranger Tides (2011) - $380M, 2. Pirates of the Caribbean: At World's End (2007) - $300M"
+    id: "big_budget_movies"
+
+  - question: "Which movies have an IMDb rating of 9.5 or higher?"
+    answer: "1. Band of Brothers (9.6), 2. Civil War, The (9.5)"
+    id: "high_imdb_rating_movies"

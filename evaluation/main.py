@@ -7,39 +7,35 @@ from uuid import uuid4
 
 import pandas as pd
 from dotenv import load_dotenv
+from langchain.agents import create_agent
 from langchain_core.tools import StructuredTool
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import create_react_agent
-from mcp import ClientSession, StdioServerParameters
+from mcp import ClientSession
 from mcp.client.stdio import stdio_client
 
 from evaluation.components.agent import create_agent_response_record
 from evaluation.components.fail import create_failed_response_record
 from evaluation.components.metadata import create_metadata_record
 from evaluation.components.generate_report import create_report_from_dataframes
-from evaluation.models import AgentResponseTableRecord, FailedResponseTableRecord, MetadataTableRecord, QuestionRecord
-from prompt import get_movies_system_prompt
+from evaluation.models import (
+    AgentResponseTableRecord,
+    FailedResponseTableRecord,
+    MetadataTableRecord,
+    QuestionRecord,
+)
+from llm import build_agent_model, get_agent_model
+from mcp_server import ALLOWED_MCP_TOOLS, get_neo4j_mcp_server
+from prompt import get_movies_system_prompt, ontology_enabled
 from tools.find_movie_recommendations import find_movie_recommendations_tool
 from tools.get_ontology import get_ontology_tool
-from utils import get_questions_from_yaml, pre_model_hook
+from utils import get_questions_from_yaml, message_text, trim_history
 
 if load_dotenv():
     print("Loaded .env file")
 else:
     print("No .env file found")
-
-neo4j_cypher_mcp = StdioServerParameters(
-    command="uvx",
-    args=["mcp-neo4j-cypher@0.3.0", "--transport", "stdio"],
-    env={
-        "NEO4J_URI": os.getenv("NEO4J_URI"),
-        "NEO4J_USERNAME": os.getenv("NEO4J_USERNAME"),
-        "NEO4J_PASSWORD": os.getenv("NEO4J_PASSWORD"),
-        "NEO4J_DATABASE": os.getenv("NEO4J_DATABASE"),
-    },
-)
 
 evals_loc = "evals/output/"
 eval_results = list()
@@ -52,7 +48,7 @@ async def evaluate_single_question(
     metadata_records: list[MetadataTableRecord],
     agent_response_records: list[AgentResponseTableRecord],
     failed_response_records: list[FailedResponseTableRecord],
-    model: str = "openai:gpt-4.1",
+    model: str = get_agent_model(),
 ) -> None:
     """
     Evaluate a single question in a new conversation thread.
@@ -88,7 +84,7 @@ async def evaluate_single_question(
             question_id=question_dict.get("id"),
             question=question_dict.get("question"),
             expected_answer=question_dict.get("answer"),
-            agent_final_answer=response["messages"][-1].content,
+            agent_final_answer=message_text(response["messages"][-1]),
             model=model,
         )
 
@@ -111,7 +107,6 @@ async def evaluate_single_question(
         failed_response_records.append(failed_response_record)
 
 
-
 async def _evaluate_single_batch(
     agent: CompiledStateGraph,
     batch: list[QuestionRecord],
@@ -120,7 +115,7 @@ async def _evaluate_single_batch(
     metadata_records: list[MetadataTableRecord],
     agent_response_records: list[AgentResponseTableRecord],
     failed_response_records: list[FailedResponseTableRecord],
-    model: str = "openai:gpt-4.1",
+    model: str = get_agent_model(),
 ) -> None:
     """
     Evaluate a batch of questions asynchronously.
@@ -138,7 +133,13 @@ async def _evaluate_single_batch(
 
     tasks = [
         evaluate_single_question(
-            agent, question_dict, tools, metadata_records, agent_response_records, failed_response_records, model
+            agent,
+            question_dict,
+            tools,
+            metadata_records,
+            agent_response_records,
+            failed_response_records,
+            model,
         )
         for question_dict in batch
     ]
@@ -153,7 +154,7 @@ async def _evaluate_batches(
     metadata_records: list[MetadataTableRecord],
     agent_response_records: list[AgentResponseTableRecord],
     failed_response_records: list[FailedResponseTableRecord],
-    model: str = "openai:gpt-4.1",
+    model: str = get_agent_model(),
     batch_size: int = 10,
 ) -> None:
     """
@@ -193,7 +194,14 @@ async def _evaluate_batches(
         else:
             batch = questions[i : i + batch_size]
         batch_results = await _evaluate_single_batch(
-            agent, batch, prompt, tools, metadata_records, agent_response_records, failed_response_records, model
+            agent,
+            batch,
+            prompt,
+            tools,
+            metadata_records,
+            agent_response_records,
+            failed_response_records,
+            model,
         )
 
         # Add extracted records to the results list
@@ -216,7 +224,7 @@ async def main():
     metadata_records = list()
     agent_response_records = list()
     failed_response_records = list()
-    async with stdio_client(neo4j_cypher_mcp) as (read, write):
+    async with stdio_client(get_neo4j_mcp_server()) as (read, write):
         async with ClientSession(read, write) as session:
             # Initialize the connection
             await session.initialize()
@@ -225,25 +233,27 @@ async def main():
             mcp_tools = await load_mcp_tools(session)
 
             # We only need to get schema and execute read queries from the Cypher MCP server
-            allowed_tools = [
-                tool for tool in mcp_tools if tool.name in {"get_neo4j_schema", "read_neo4j_cypher"}
-            ]
+            allowed_tools = [tool for tool in mcp_tools if tool.name in ALLOWED_MCP_TOOLS]
 
             # We can also add non-mcp tools for our agent to use
             allowed_tools.append(find_movie_recommendations_tool)
-            allowed_tools.append(get_ontology_tool)
+            with_ontology = ontology_enabled()
+            if with_ontology:
+                allowed_tools.append(get_ontology_tool)
 
-            prompt = get_movies_system_prompt()
+            prompt = get_movies_system_prompt(with_ontology)
 
-            model = "openai:gpt-4.1"
-            batch_size = 5
+            model = get_agent_model()
+            # all questions run concurrently (the harness already parallelizes
+            # with asyncio.gather); keep this simple and just size the batch
+            batch_size = 20
 
-            agent = create_react_agent(
-                model=model,
-                pre_model_hook=pre_model_hook,
+            agent = create_agent(
+                build_agent_model(),
+                allowed_tools,
+                middleware=[trim_history],
                 checkpointer=InMemorySaver(),
-                tools=allowed_tools,
-                prompt=prompt,
+                system_prompt=prompt,
             )
 
             await _evaluate_batches(
@@ -258,10 +268,9 @@ async def main():
                 batch_size,
             )
 
-            timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-            directory = (   
-                f"{evals_loc}eval_run_{timestamp}"
-            )
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            condition = "ontology" if with_ontology else "no_ontology"
+            directory = f"{evals_loc}eval_run_{timestamp}_{condition}"
 
             os.makedirs(directory, exist_ok=True)
 
@@ -278,7 +287,10 @@ async def main():
                 index=False,
             )
 
-            failed_response_df = pd.DataFrame(failed_response_records, columns=list(FailedResponseTableRecord.__annotations__.keys()))
+            failed_response_df = pd.DataFrame(
+                failed_response_records,
+                columns=list(FailedResponseTableRecord.__annotations__.keys()),
+            )
             failed_response_df.to_csv(
                 f"{directory}/failed_response.csv",
                 index=False,

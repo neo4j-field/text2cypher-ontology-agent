@@ -1,7 +1,7 @@
 import yaml
+from langchain.agents.middleware import ModelRequest, wrap_model_call
 from langchain_core.messages import AnyMessage
 from langchain_core.messages.utils import count_tokens_approximately, trim_messages
-from langgraph.prebuilt.chat_agent_executor import AgentState
 
 
 def get_questions_from_yaml(file_path: str) -> list[dict[str, str]]:
@@ -25,59 +25,89 @@ def get_questions_from_yaml(file_path: str) -> list[dict[str, str]]:
         return yaml.safe_load(file).get("questions", [])
 
 
-def pre_model_hook(state: AgentState) -> dict[str, list[AnyMessage]]:
+def message_text(message: AnyMessage) -> str:
     """
-    This function will be called every time before the node that calls LLM.
+    Return the text of a message as a plain string.
 
-    Documentation:
-    https://langchain-ai.github.io/langgraph/how-tos/create-react-agent-manage-message-history/?h=create_react_agent
+    With the OpenAI Responses API, `AIMessage.content` is a list of content
+    blocks (e.g. `[{"type": "text", "text": "42"}]`) rather than a string.
+    Flatten the text blocks so the result can be written to CSV or scored.
 
     Parameters
     ----------
-    state : AgentState
-        The state of the agent.
+    message : AnyMessage
+        The message to extract text from.
 
     Returns
     -------
-    dict[str, list[AnyMessage]]
-        The updated messages to pass to the LLM as context.
+    str
+        The message text.
+    """
+
+    content = message.content
+    if isinstance(content, str):
+        return content
+
+    parts = []
+    for block in content or []:
+        if isinstance(block, str):
+            parts.append(block)
+        elif isinstance(block, dict) and block.get("type") == "text":
+            parts.append(block.get("text", ""))
+        elif hasattr(block, "text"):
+            parts.append(block.text)
+    return "\n".join(part for part in parts if part)
+
+
+@wrap_model_call
+async def trim_history(request: ModelRequest, handler):
+    """
+    Middleware that keeps the model context under the token budget.
+
+    Called before every model call. It trims the conversation history that is
+    sent to the LLM without modifying the messages stored in the graph state.
+
+    Documentation:
+    https://docs.langchain.com/oss/python/langchain/middleware
+
+    Parameters
+    ----------
+    request : ModelRequest
+        The model request (its `messages` exclude the system prompt).
+    handler : callable
+        The function that calls the model with the (possibly modified) request.
+
+    Returns
+    -------
+    ModelResponse
+        The model response.
     """
 
     trimmed_messages = trim_messages(
-        state["messages"],
+        request.messages,
         strategy="last",
         token_counter=count_tokens_approximately,
         max_tokens=30_000,
         start_on="human",
         end_on=("human", "tool"),
-        include_system=True,  # -> We always want to include the system prompt in the context
     )
-    # You can return updated messages either under:
-    # `llm_input_messages` -> To keep the original message history unmodified in the graph state and pass the updated history only as the input to the LLM
-    # `messages`           -> To overwrite the original message history in the graph state with the updated history
-    return {"llm_input_messages": trimmed_messages}
+    return await handler(request.override(messages=trimmed_messages))
 
 
-async def print_astream(async_stream, output_messages_key: str = "llm_input_messages") -> None:
+async def print_astream(async_stream) -> None:
     """
     Print the stream of messages from the agent.
-
-    Based on the documentation:
-    https://langchain-ai.github.io/langgraph/how-tos/create-react-agent-manage-message-history/?h=create_react_agent#keep-the-original-message-history-unmodified
 
     Parameters
     ----------
     async_stream : AsyncGenerator[dict[str, dict[str, list[AnyMessage]]], None]
         The stream of messages from the agent.
-    output_messages_key : str, optional
-        The key to use for the output messages, by default "llm_input_messages".
     """
 
     async for chunk in async_stream:
         for node, update in chunk.items():
             print(f"Update from node: {node}")
-            messages_key = output_messages_key if node == "pre_model_hook" else "messages"
-            for message in update[messages_key]:
+            for message in update.get("messages", []):
                 if isinstance(message, tuple):
                     print(message)
                 else:

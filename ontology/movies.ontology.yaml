@@ -1,9 +1,18 @@
 # An ontology for the Movies graph, written in the Neo4j Ontology Graph Specification.
 # https://github.com/neo4j/ontology-graph-spec
 #
-# It describes the same database the agent queries, but adds what `get_neo4j_schema`
+# It describes the same database the agent queries, but adds what `get-schema`
 # cannot tell the model: what things mean (descriptions, aliases), how many
 # relationships each end has (cardinality), and which values a property may take.
+#
+# Every claim below is verified against the demo database:
+# * `Actor` and `Director` exist as secondary labels on `Person` nodes.
+# * `REVIEWED`, `PRODUCED`, `WROTE` and `FOLLOWS` are NOT in this dataset and
+#   are deliberately not declared here — an ontology that invents relationships
+#   the data does not have misleads the agent.
+# * Cardinality was checked with `NOT EXISTS` queries: 41 movies have no actor
+#   and 55 have no director, so `min_count` is 0 for both; every movie has at
+#   least one genre, so `IN_GENRE` keeps `min_count: 1`.
 schema: https://neo4j.com/docs/ontology-graph-spec/1.1.0/schema.json
 version: "1"
 id: movies
@@ -12,7 +21,7 @@ description: People, films, their genres and how users rate them.
 nodes:
   Person:
     label: Person
-    description: A person in the film industry.
+    description: A person in the film industry. The same nodes also carry the secondary labels Actor and Director.
     aliases: [Actor, Performer, Director, Filmmaker]
     properties:
       name:
@@ -55,6 +64,9 @@ nodes:
         type: STRING
         must_exist: true
         description: Display name.
+      userId:
+        type: STRING
+        description: Numeric identifier as a string, e.g. '547'.
   Genre:
     label: Genre
     description: A category of film, such as Drama or Science Fiction.
@@ -68,38 +80,16 @@ relationships:
     type: ACTED_IN
     description: An actor appeared in a film.
     from: { node: Person, label: Person, min_count: 0 }
-    to: { node: Movie, label: Movie, min_count: 1 }
+    to: { node: Movie, label: Movie, min_count: 0 }
     properties:
-      roles:
-        type: LIST<STRING>
-        description: Characters played.
+      role:
+        type: STRING
+        description: Character played, e.g. 'Officer of the Marines (uncredited)'.
   DIRECTED:
     type: DIRECTED
     description: A person directed a film.
     from: { node: Person, label: Person, min_count: 0 }
-    to: { node: Movie, label: Movie, min_count: 1 }
-  PRODUCED:
-    type: PRODUCED
-    description: A person produced a film.
-    from: { node: Person, label: Person, min_count: 0 }
     to: { node: Movie, label: Movie, min_count: 0 }
-  WROTE:
-    type: WROTE
-    description: A person wrote the screenplay for a film.
-    from: { node: Person, label: Person, min_count: 0 }
-    to: { node: Movie, label: Movie, min_count: 0 }
-  REVIEWED:
-    type: REVIEWED
-    description: A person published a review of a film.
-    from: { node: Person, label: Person, min_count: 0 }
-    to: { node: Movie, label: Movie, min_count: 0 }
-    properties:
-      rating:
-        type: INTEGER
-        description: Review score, 0 to 100.
-      summary:
-        type: STRING
-        description: Short review text.
   RATED:
     type: RATED
     description: A user rated a film.
@@ -109,16 +99,11 @@ relationships:
       rating:
         type: FLOAT
         description: Rating from 0.5 to 5.0 in half-star increments.
-      datetime:
-        type: ZONED DATETIME
-        description: When the rating was given.
+      timestamp:
+        type: INTEGER
+        description: Unix epoch seconds when the rating was given.
   IN_GENRE:
     type: IN_GENRE
     description: A film belongs to a category.
     from: { node: Movie, label: Movie, min_count: 0 }
     to: { node: Genre, label: Genre, min_count: 1 }
-  FOLLOWS:
-    type: FOLLOWS
-    description: One person follows another person's reviews.
-    from: { node: Person, label: Person, min_count: 0 }
-    to: { node: Person, label: Person, min_count: 0 }
