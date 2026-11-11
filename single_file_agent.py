@@ -185,7 +185,9 @@ async def main():
             # CONFIG lets the checkpointer keep the conversation going across
             # turns. `stream_mode="updates"` reports every intermediate step
             # (model text, tool calls, tool results) as it happens.
-            print("\n===================================== Chat =====================================\n")
+            print(
+                "\n===================================== Chat =====================================\n"
+            )
 
             while True:
                 user_input = input("> ")

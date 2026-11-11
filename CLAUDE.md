@@ -52,13 +52,15 @@ problem beyond a few hundred entities, which is what the todo items below addres
 ## Todo
 
 Ontology tool
-- [ ] Tighten tool description + prompt: state the routing policy and fallback conditions
-      explicitly (currently "instead of, or alongside" is ambiguous).
-- [ ] Token budget + index mode: if `entities` is omitted or the card exceeds ~2k tokens,
-      return an entity index ("label — one-line description; call again with entities") instead
-      of the full card. Cap the "no match, available entities" list.
-- [ ] Optional `search` parameter (alias/description matching) for vocabulary mismatch.
-- [ ] Skip empty `## Nodes` / `## Relationships` headings in the rendered card.
+- [x] Tighten tool description + prompt (2026-11-11): routing policy is explicit — call
+      `get_ontology` FIRST; fall back to `get-schema` only when the ontology has no match
+      (the response lists what is available) or the question needs data-dependent facts.
+- [x] Token budget + index mode (2026-11-11): cards over `TOKEN_BUDGET = 2000` tokens
+      (len//4 estimate) return an entity index ("label — one-line description") instead;
+      the "no match" list is capped at `MAX_LISTED_ENTITIES = 20`.
+- [x] Optional `search` parameter (2026-11-11): case-insensitive substring match against
+      labels, relationship types, aliases and descriptions ("performer" → Person).
+- [x] Skip empty `## Nodes` / `## Relationships` headings in the rendered card.
 - [ ] When `db.ontology.get()` ships: verify its output shape (the yield name was assumed),
       test `source="db"`, remove the "planned for 2026.12" caveat.
 
@@ -68,8 +70,9 @@ README / story
       and a sample card.
 - [x] Plain-language **pros and cons** section in the README (2026-11-11), explicitly noting
       that not every benefit is measured by this example's eval — it is template code.
-- [ ] Add the card-size table and the "small ontology: preload vs tool" trade-off.
-- [ ] Link the upstream project and credit it.
+- [x] Card-size table and the "small ontology: preload vs tool" trade-off in the README
+      (measured: full card ~400 tokens, 3-entity sub-schema ~250, no-properties ~140).
+- [x] Upstream project linked and credited (README "Credits" section).
 
 Evidence
 - [x] Add a `WITH_ONTOLOGY` switch (`prompt.py`) and run both conditions
@@ -98,6 +101,11 @@ Evidence
       baseline's 2.83 / 3.83 / 20.9 s. Accuracy stays roughly equal (rouge 0.355 vs 0.343,
       relevancy 0.768 vs 0.773, factual 0.273 vs 0.339 but judge-noisy — not led with).
       README now carries these numbers with the honest template-code framing.
+- [x] Sanity run after the tool/prompt polish (2026-11-11 16:09): 16/16, zero errors,
+      `get_ontology` called on all 16 questions; focus effort 2.5 tool calls vs baseline 2.83.
+      Absolute latency swings heavily with API load across runs (ontology focus 14–27 s,
+      baseline 26–30 s) — the README therefore states tool-call counts and the ~half-the-time
+      ratio, not absolute seconds.
 
 Fork hygiene (audit done — details below)
 - [x] Migrated to current majors (2026-11-11): langchain 1.5, langgraph 1.2,
@@ -133,9 +141,11 @@ Fork hygiene (audit done — details below)
       (`evaluation/components/agent.py`).
 - [x] Fixed stale README eval docs (2026-11-11): points at `evaluation/main.py`, documents
       env-driven config, and the `evals/output/eval_run_<timestamp>_<condition>/` layout.
-- [ ] Add CI: ruff + a smoke test for `get_ontology` (and ideally validate
-      `ontology/*.yaml` against `ontology-graph-spec.schema.json`).
-- [ ] Reset the CHANGELOG for the fork.
+- [x] Add CI (2026-11-11): `.github/workflows/ci.yml` runs ruff (check + format --check)
+      and the offline smoke test `tests/smoke_test.py` (sub-schema selection, no-match
+      handling, property detail, ontology YAML structure) — no database or API key needed.
+- [x] Reset the CHANGELOG for the fork (2026-11-11): fork header + Unreleased section;
+      pre-fork history stays in the upstream repo.
 
 ## Conventions
 

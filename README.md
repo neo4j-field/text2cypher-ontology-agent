@@ -139,14 +139,20 @@ a public YAML/JSON format for describing graph models. The example ontology for 
 lives in [ontology/movies.ontology.yaml](ontology/movies.ontology.yaml).
 
 The tool returns a compact "schema card" instead of the whole document (about 40 tokens per
-entity — roughly 500 for this Movies ontology), and accepts parameters that matter when the
+entity — roughly 400 for this Movies ontology), and accepts parameters that matter when the
 ontology is too large for the model's context:
 
 - **`entities`**: build a sub-schema card from only the entities the question needs (matched against labels, relationship types and their aliases), including the relationships between them. This is the pattern to use for large ontologies: the agent fetches only the relevant slice.
+- **`search`**: case-insensitive substring match against labels, relationship types, aliases and descriptions — use it to resolve vocabulary ("performer" finds `Person` via its alias).
 - **`include_properties`**: omit property details to get an even smaller card.
 - **`source`**: where to read the ontology from:
   - `source="file"` (default) reads a YAML or JSON document from disk, `ONTOLOGY_FILE` in `.env` (defaults to `ontology/movies.ontology.yaml`).
   - `source="db"` reads the ontology persisted in the database itself with `CALL db.ontology.get()`. Ontology persistence in the DBMS is planned for Neo4j 2026.12 (self-managed & Aura); until your database supports it, use `source="file"` — for very large ontologies, store the document as data in a separate database and select sub-schemas with `entities`.
+
+As a safety net for very large ontologies, if a card would exceed ~2,000 tokens the tool
+returns an **entity index** instead — one line per entity ("label — one-line description")
+plus a note to call again with `entities` for the ones needed (~140 tokens for this ontology).
+The "no match" response lists the available entities, capped at 20.
 
 A card looks like this (excerpt):
 
@@ -170,6 +176,28 @@ schema context, and to fall back to `get-schema` only when the ontology has no m
 entity (the tool's response lists what is available), or when the question depends on
 data-dependent facts the ontology cannot know — actual values, populated properties, counts.
 
+#### How big is the card?
+
+Approximate sizes for this ontology (4 characters ≈ 1 token):
+
+| Call | Size |
+|---|---|
+| Full card (13 entities) | ~400 tokens |
+| Sub-schema, 3 entities | ~250 tokens |
+| Sub-schema, 3 entities, no properties | ~140 tokens |
+
+A few hundred tokens is small enough to fetch without thinking about it. For ontologies with
+hundreds of entities, always use `entities` so the card stays in this range regardless of the
+ontology's total size.
+
+**Small ontology: preload it or keep it a tool?** For an ontology this small you could paste the
+card into the system prompt instead of exposing a tool. Preloading saves one tool round-trip per
+question but costs those tokens on *every* call, even for questions that never need schema
+context; the tool costs one round-trip but only when schema context is actually needed, and it
+scales (via `entities`) to ontologies that would never fit in a prompt. This example keeps it a
+tool because that is the pattern that scales; for a small, always-needed ontology, preloading is
+a reasonable simplification.
+
 ### What we measured
 
 This repo is template code: it shows how to add an ontology to a text2cypher agent, and how to
@@ -178,8 +206,9 @@ without the ontology** — a capable model answers most of these questions corre
 schema. What differs is the path to the answer: on questions where units, aliases or storage
 conventions matter, the ontology agent asks fewer follow-up queries because it does not have to
 discover those facts by sampling the data. On the six questions written to probe exactly that,
-the ontology run used about 2 tool calls and 8 s per question versus about 3 calls and 21 s
-without it (two runs, small sample — directional, not a benchmark claim). RAGAS factual
+the ontology run used about 2 tool calls per question versus about 3 without it, and roughly
+half the time per question (small sample, and absolute
+latency varies with API load — directional, not a benchmark claim). RAGAS factual
 correctness was too noisy on list-style answers to lead with, so we don't.
 
 If your domain has many entities, ambiguous property names, or vocabulary your users do not share
@@ -354,6 +383,14 @@ make format
 **Python Issues:**
 - Ensure Python 3.11+ is installed
 - Try recreating your virtual environment if using pip
+
+## Credits
+
+This repository is a fork of
+[neo4j-field/text2cypher-react-agent-example](https://github.com/neo4j-field/text2cypher-react-agent-example)
+by the Neo4j Field team — the agent skeleton, the evaluation harness and the recommendation
+tool come from there. The ontology tool, the ontology-aware prompt and the A/B evaluation
+setup were added in this fork.
 
 ## License
 

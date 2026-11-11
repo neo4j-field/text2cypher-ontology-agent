@@ -1,9 +1,13 @@
 import os
 
 ONTOLOGY_INSTRUCTION = (
-    "* Prefer the `get_ontology` tool for schema context: it tells you what labels, "
-    "relationship types and properties mean (descriptions, aliases, cardinality), which "
-    "`get-schema` does not. Pass `entities` to get only the relevant part of the ontology."
+    "* Call `get_ontology` FIRST for schema context: it tells you what labels, "
+    "relationship types and properties mean (descriptions, aliases, cardinality, "
+    "allowed values), which `get-schema` does not. Pass `entities` to get only the "
+    "relevant part of the ontology, or `search` to resolve vocabulary to entities. "
+    "Fall back to `get-schema` only when the ontology has no matching entity (its "
+    "response lists what is available) or when the question needs data-dependent "
+    "facts the ontology cannot know: actual values, populated properties, counts."
 )
 
 SCHEMA_INSTRUCTION = (
