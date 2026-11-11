@@ -86,13 +86,6 @@ def create_report_str_from_row(row: dict[str, Any]) -> str:
     return row_report
 
 
-def pretty_print(row: dict[str, Any]) -> None:
-    print(create_report_str_from_row(row))
-    print()
-    print(BAR)
-    print()
-
-
 def _create_report_str(title: str, main_df: pd.DataFrame, failed_response_df: pd.DataFrame) -> str:
     report = create_report_header(title, main_df, failed_response_df)
     for idx, row in main_df.iterrows():
@@ -198,7 +191,7 @@ if __name__ == "__main__":
     else:
         directory_path = args[0]
 
-    title = f"Evaluation Report {directory_path.lstrip('eval_run_')}"
+    title = f"Evaluation Report {directory_path.removeprefix('eval_run_')}"
     report = create_report_from_directory(
         title=title,
         directory_path=EVALS_PATH + directory_path,

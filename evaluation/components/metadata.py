@@ -1,3 +1,5 @@
+"""Metadata extraction from an agent response."""
+
 from typing import Any, Optional
 
 from langchain_core.messages import AIMessage
@@ -6,7 +8,7 @@ from evaluation.models import MetadataTableRecord
 from utils import message_text
 
 
-async def create_metadata_record(
+def create_metadata_record(
     question_id: str,
     question: str,
     expected_answer: str,
@@ -16,16 +18,17 @@ async def create_metadata_record(
     response_time: Optional[float],
 ) -> MetadataTableRecord:
     """
-    Create a metadata record for the agent response. If an error is provided, then a sparse record is returned with the error information.
+    Create a metadata record describing how the agent answered one question:
+    which tools it called, which Cypher queries it generated and how long it
+    took. If extraction fails, a sparse record with the error is returned.
     """
 
     try:
+        # Every AIMessage may carry tool calls; collect them all.
         tool_calls = [
             tool_call
             for message in agent_response["messages"]
             if isinstance(message, AIMessage)
-            and hasattr(message, "tool_calls")
-            and message.tool_calls
             for tool_call in message.tool_calls
         ]
 

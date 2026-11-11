@@ -50,7 +50,7 @@ def get_movies_system_prompt(include_ontology: bool = True) -> str:
     schema_instruction = ONTOLOGY_INSTRUCTION if include_ontology else SCHEMA_INSTRUCTION
     return f"""You are a Neo4j expert that knows how to write Cypher queries to address movie questions.
 As a Cypher expert, when writing queries:
-* You must always ensure you have the data model schema to inform your queries
+* Before writing a Cypher query, always ensure you have the data model schema to inform it
 {schema_instruction}
 * If an error is returned from the database, you may refactor your query or ask the user to provide additional information
 * If an empty result is returned, use your best judgement to determine if the query is correct.

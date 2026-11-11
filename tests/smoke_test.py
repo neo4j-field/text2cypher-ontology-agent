@@ -14,7 +14,6 @@ else still runs. Exits non-zero with a list of failed checks if anything is brok
 
 import json
 import sys
-import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -52,9 +51,7 @@ def check_ontology_document() -> None:
     check("ontology file parses as a YAML mapping", isinstance(document, dict))
 
     try:
-        with tempfile.NamedTemporaryFile("wb", suffix=".json", delete=False) as tmp:
-            tmp.write(urllib.request.urlopen(SPEC_SCHEMA_URL).read())
-            schema_file = Path(tmp.name)
+        schema = json.loads(urllib.request.urlopen(SPEC_SCHEMA_URL, timeout=10).read())
     except OSError as error:
         print(f"[SKIP] spec schema validation -- cannot download {SPEC_SCHEMA_URL} ({error})")
         return
@@ -65,7 +62,6 @@ def check_ontology_document() -> None:
     try:
         import jsonschema
 
-        schema = json.loads(schema_file.read_text())
         errors = sorted(jsonschema.Draft202012Validator(schema).iter_errors(document), key=str)
         check(
             "ontology validates against the published JSON Schema",
@@ -152,6 +148,19 @@ def check_ontology_tool() -> None:
     check(
         "include_properties=True lists property detail",
         "imdbRating: FLOAT" in detailed["schema_card"],
+    )
+
+    # search: vocabulary the user (not the schema) uses, resolved via aliases
+    # and descriptions. 'performer' is an alias of Person.
+    found = get_ontology(search="performer")
+    check(
+        "search='performer' resolves to Person",
+        "Person" in found.get("entities", []),
+        str(found.get("entities")),
+    )
+    check(
+        "search='performer' card shows the Person heading",
+        "### Person" in found.get("schema_card", ""),
     )
 
 

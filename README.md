@@ -151,9 +151,14 @@ ontology is too large for the model's context:
 - **`entities`**: build a sub-schema card from only the entities the question needs (matched against labels, relationship types and their aliases), including the relationships between them. This is the pattern to use for large ontologies: the agent fetches only the relevant slice.
 - **`search`**: case-insensitive substring match against labels, relationship types, aliases and descriptions — use it to resolve vocabulary ("performer" finds `Person` via its alias).
 - **`include_properties`**: omit property details to get an even smaller card.
-- **`source`**: where to read the ontology from:
-  - `source="file"` (default) reads a YAML or JSON document from disk, `ONTOLOGY_FILE` in `.env` (defaults to `ontology/movies.ontology.yaml`).
-  - `source="db"` reads the ontology persisted in the database itself with `CALL db.ontology.get()`. Ontology persistence in the DBMS is planned for Neo4j 2026.12 (self-managed & Aura); until your database supports it, use `source="file"` — for very large ontologies, store the document as data in a separate database and select sub-schemas with `entities`.
+
+Where the ontology is read from is a deployment choice, not something the model decides:
+`ONTOLOGY_SOURCE=file` (default) reads a YAML or JSON document from disk (`ONTOLOGY_FILE` in
+`.env`, defaults to `ontology/movies.ontology.yaml`); `ONTOLOGY_SOURCE=db` reads the ontology
+persisted in the database itself with `CALL db.ontology.get()` — ontology persistence in the
+DBMS is planned for a future Neo4j release (2026.12 target, timing TBC). Until your database
+supports it, use the file source; for very large ontologies, store the document as data in a
+separate database and select sub-schemas with `entities`.
 
 As a safety net for very large ontologies, if a card would exceed ~2,000 tokens the tool
 returns an **entity index** instead — one line per entity ("label — one-line description")

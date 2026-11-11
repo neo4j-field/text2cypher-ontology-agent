@@ -19,13 +19,15 @@ If a schema card would exceed `TOKEN_BUDGET` (estimated as `len(text) // 4`), a 
 entity index is returned instead, and the agent is told to call again with `entities`
 for the part it needs.
 
-Two sources are supported:
-* `source="file"` reads a YAML or JSON ontology file (default: `ontology/movies.ontology.yaml`,
-  override with the `ONTOLOGY_FILE` environment variable).
-* `source="db"` fetches the ontology persisted in the database itself via
-  `CALL db.ontology.get()`. This procedure is planned for Neo4j 2026.12 (self-managed & Aura);
-  until your database has it, use `source="file"`, or store the ontology as data in a
-  separate database and select sub-schemas with the `entities` parameter.
+Two sources are supported, chosen with the `ONTOLOGY_SOURCE` environment variable
+(a deployment choice, not something the model decides):
+* `ONTOLOGY_SOURCE=file` (default) reads a YAML or JSON ontology file
+  (default: `ontology/movies.ontology.yaml`, override with `ONTOLOGY_FILE`).
+* `ONTOLOGY_SOURCE=db` fetches the ontology persisted in the database itself via
+  `CALL db.ontology.get()`. This procedure is planned for a future Neo4j release
+  (2026.12 target, timing TBC); until your database has it, use the file source, or
+  store the ontology as data in a separate database and select sub-schemas with the
+  `entities` parameter.
 """
 
 import os
@@ -55,8 +57,8 @@ def _estimate_tokens(text: str) -> int:
 
 DB_SOURCE_UNAVAILABLE_HINT = (
     "The database does not expose db.ontology.get(). Ontology persistence in the DBMS"
-    " is planned for Neo4j 2026.12; until then use source='file', pointing ONTOLOGY_FILE"
-    " at your ontology document."
+    " is planned for a future Neo4j release; until then set ONTOLOGY_SOURCE=file,"
+    " pointing ONTOLOGY_FILE at your ontology document."
 )
 
 
@@ -82,12 +84,14 @@ def _load_ontology_document(source: str) -> dict[str, Any]:
             return yaml.safe_load(file)
 
     if source == "db":
-        driver = GraphDatabase.driver(
-            os.getenv("NEO4J_URI"),
-            auth=(os.getenv("NEO4J_USERNAME"), os.getenv("NEO4J_PASSWORD")),
-        )
         try:
-            with driver.session(database=os.getenv("NEO4J_DATABASE")) as session:
+            with (
+                GraphDatabase.driver(
+                    os.getenv("NEO4J_URI"),
+                    auth=(os.getenv("NEO4J_USERNAME"), os.getenv("NEO4J_PASSWORD")),
+                ) as driver,
+                driver.session(database=os.getenv("NEO4J_DATABASE")) as session,
+            ):
                 record = session.run("CALL db.ontology.get()").single(strict=True)
         except Exception as error:  # noqa: BLE001 -> surface a helpful message to the model
             raise ValueError(f"{error}. {DB_SOURCE_UNAVAILABLE_HINT}") from error
@@ -400,41 +404,35 @@ def _render_entity_index(
     return "\n".join(lines)
 
 
-def _available_entities(document: dict[str, Any]) -> list[str]:
+def _entity_names(nodes: dict[str, Any], relationships: dict[str, Any]) -> list[str]:
     """
-    List the labels and relationship types the ontology declares, sorted, capped at
-    `MAX_LISTED_ENTITIES` entries.
+    List the labels and relationship types of a (sub-)schema, sorted.
 
     Parameters
     ----------
-    document: dict[str, Any]
-        The full ontology document.
+    nodes: dict[str, Any]
+        The nodes, keyed by id.
+    relationships: dict[str, Any]
+        The relationships, keyed by id.
 
     Returns
     -------
     list[str]
-        The available entity names.
+        The entity names.
     """
 
-    available = sorted(
+    return sorted(
         [
-            *(n.get("label", nid) for nid, n in document.get("nodes", {}).items()),
-            *(r.get("type", rid) for rid, r in document.get("relationships", {}).items()),
+            *(n.get("label", nid) for nid, n in nodes.items()),
+            *(r.get("type", rid) for rid, r in relationships.items()),
         ]
     )
-    if len(available) > MAX_LISTED_ENTITIES:
-        available = [
-            *available[:MAX_LISTED_ENTITIES],
-            f"... and {len(available) - MAX_LISTED_ENTITIES} more",
-        ]
-    return available
 
 
 def get_ontology(
     entities: Optional[list[str]] = None,
     search: Optional[str] = None,
     include_properties: bool = True,
-    source: str = "file",
 ) -> dict[str, Any]:
     """
     Get the ontology of the database as a compact schema card: labels, relationship
@@ -450,33 +448,32 @@ def get_ontology(
     call again with `entities` to get the full cards for the entities you need.
     """
 
-    document = _load_ontology_document(source)
+    document = _load_ontology_document(os.getenv("ONTOLOGY_SOURCE", "file"))
     nodes, relationships = _select_sub_schema(document, entities, search)
 
     if not nodes and not relationships and (entities or search):
         what = f"entities {entities}" if entities else f"search {search!r}"
+        available = _entity_names(document.get("nodes", {}), document.get("relationships", {}))
+        if len(available) > MAX_LISTED_ENTITIES:
+            available = [
+                *available[:MAX_LISTED_ENTITIES],
+                f"... and {len(available) - MAX_LISTED_ENTITIES} more",
+            ]
         return {
             "schema_card": (
                 f"No ontology entities matched {what}. Available labels and relationship"
-                f" types: {', '.join(_available_entities(document))}."
+                f" types: {', '.join(available)}."
             )
         }
 
     card = _render_schema_card(document, nodes, relationships, include_properties)
-    entity_names = sorted(
-        [
-            *(n.get("label", nid) for nid, n in nodes.items()),
-            *(r.get("type", rid) for rid, r in relationships.items()),
-        ]
-    )
+    entity_names = _entity_names(nodes, relationships)
     if _estimate_tokens(card) > TOKEN_BUDGET:
         return {
-            "source": source,
             "entities": entity_names,
             "schema_card": _render_entity_index(document, nodes, relationships),
         }
     return {
-        "source": source,
         "entities": entity_names,
         "schema_card": card,
     }
@@ -502,14 +499,6 @@ class GetOntologyInput(BaseModel):
     include_properties: bool = Field(
         default=True,
         description="Whether to include property details, or only labels and relationship types.",
-    )
-    source: str = Field(
-        default="file",
-        description=(
-            "Where to read the ontology from: 'file' (a YAML or JSON ontology document on disk)"
-            " or 'db' (the ontology persisted in the database via db.ontology.get(),"
-            " available from Neo4j 2026.12)."
-        ),
     )
 
 
