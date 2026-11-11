@@ -96,17 +96,72 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 
 ## Ontology-aware Text2Cypher
 
-The schema from `get_neo4j_schema` tells the model which labels, relationship types and properties exist, but not what they mean: it has no descriptions, no aliases ("actor" is a `Person`), no cardinality ("every movie has at least one actor") and no allowed values.
+### Why add an ontology?
 
-The `get_ontology` tool ([tools/get_ontology.py](tools/get_ontology.py)) fills that gap by exposing a document written in the [Neo4j Ontology Graph Specification](https://github.com/neo4j/ontology-graph-spec) — a public YAML/JSON format for describing graph models. The example ontology for the Movies domain lives in [ontology/movies.ontology.yaml](ontology/movies.ontology.yaml).
+`get_neo4j_schema` returns the **structure** of the graph, inferred from a data sample: labels,
+relationship types, property names and types, and whether a property is indexed. It does not
+tell the model what any of it **means**. An ontology does, and that difference shows up directly
+in the Cypher the agent writes:
 
-The tool returns a compact "schema card" instead of the whole document, and accepts parameters that matter when the ontology is too large for the model's context:
+| The model needs to know | `get_neo4j_schema` | Ontology |
+|---|---|---|
+| What does `imdbRating` mean? Is `budget` in USD? | ❌ | ✅ `description` |
+| The user says "actor" — is there an `Actor` label? | ❌ no label in the data → the query silently matches nothing | ✅ `aliases: [Actor, Performer]` → `Person` |
+| Which `rating` does the question mean? | ❌ two relationships both have `rating` | ✅ `RATED` (User→Movie, 0.5–5) vs `REVIEWED` (Person→Movie, 0–100) |
+| Can a movie have zero actors? | ❌ | ✅ `ACTED_IN` has `min_count: 1` at the Movie end |
+| Which values are legal? | ❌ a sample only shows observed values | ✅ `one_of`, `pattern`, constraints |
+| How is a title with "The" stored? | ❌ | ✅ "`Title, The`" |
+| What data exists right now (values, counts)? | ✅ | ❌ |
+
+Concretely, for the question *"Which actors appeared in the most movies?"* the schema-only
+agent sees no `Actor` label and must guess — typically producing `MATCH (a:Actor)` and an empty
+result, or a second schema round-trip to reason its way to `Person`. The ontology card says
+`Person (aliases: Actor, Performer, Director, Filmmaker)` up front, so the first query is
+`MATCH (p:Person)-[:ACTED_IN]->(:Movie)`. Same for *"What is the average rating of Tom Hanks'
+films?"* — with two `rating` relationships in the schema, the ontology's descriptions are what
+tell the model which one the question is about.
+
+The ontology is also a **governed artifact**: it is written down, versionable, reviewable and
+validatable against a published JSON Schema, rather than inferred differently on every call.
+
+### How it works
+
+The `get_ontology` tool ([tools/get_ontology.py](tools/get_ontology.py)) exposes a document
+written in the [Neo4j Ontology Graph Specification](https://github.com/neo4j/ontology-graph-spec) —
+a public YAML/JSON format for describing graph models. The example ontology for the Movies domain
+lives in [ontology/movies.ontology.yaml](ontology/movies.ontology.yaml).
+
+The tool returns a compact "schema card" instead of the whole document (about 40 tokens per
+entity — roughly 500 for this Movies ontology), and accepts parameters that matter when the
+ontology is too large for the model's context:
 
 - **`entities`**: build a sub-schema card from only the entities the question needs (matched against labels, relationship types and their aliases), including the relationships between them. This is the pattern to use for large ontologies: the agent fetches only the relevant slice.
 - **`include_properties`**: omit property details to get an even smaller card.
 - **`source`**: where to read the ontology from:
   - `source="file"` (default) reads a YAML or JSON document from disk, `ONTOLOGY_FILE` in `.env` (defaults to `ontology/movies.ontology.yaml`).
   - `source="db"` reads the ontology persisted in the database itself with `CALL db.ontology.get()`. Ontology persistence in the DBMS is planned for Neo4j 2026.12 (self-managed & Aura); until your database supports it, use `source="file"` — for very large ontologies, store the document as data in a separate database and select sub-schemas with `entities`.
+
+A card looks like this (excerpt):
+
+```markdown
+### Person (aliases: Actor, Performer, Director, Filmmaker)
+A person in the film industry.
+Properties:
+- name: STRING (key) - Full name.
+- born: INTEGER - Year of birth.
+
+### User -[RATED]-> Movie
+A user rated a film.
+Cardinality: min 0 at User end, min 0 at Movie end
+Properties:
+- rating: FLOAT - Rating from 0.5 to 5.0 in half-star increments.
+- datetime: ZONED DATETIME - When the rating was given.
+```
+
+**How the agent chooses between the two tools:** it is instructed to prefer `get_ontology` for
+schema context, and to fall back to `get_neo4j_schema` only when the ontology has no matching
+entity (the tool's response lists what is available), or when the question depends on
+data-dependent facts the ontology cannot know — actual values, populated properties, counts.
 
 To adapt this to your own domain, write your ontology in the [specification format](https://github.com/neo4j/ontology-graph-spec) (validate it against the published JSON Schema), point `ONTOLOGY_FILE` at it, and the agent picks it up — no other code changes needed.
 

@@ -54,8 +54,9 @@ Ontology tool
       test `source="db"`, remove the "planned for 2026.12" caveat.
 
 README / story
-- [ ] Rewrite the intro around the ontology benefits, with before/after examples
-      (alias resolution, RATED vs REVIEWED, description-driven query writing).
+- [x] Benefits section in the README with the comparison table and concrete examples
+      (alias resolution, RATED vs REVIEWED, cardinality, governed artifact), routing policy,
+      and a sample card.
 - [ ] Add the card-size table and the "small ontology: preload vs tool" trade-off.
 - [ ] Link the upstream project and credit it.
 
