@@ -1,8 +1,8 @@
-# Neo4j ReAct Agent Example
+# Ontology-Aware Text2Cypher Agent
 
-This repo provides a simple example of how to build a ReAct agent with MCP and local tools. 
+This repo is a template for building a [Text2Cypher](https://graphrag.com/reference/graphrag/text2cypher/) ReAct agent with the [official Neo4j MCP Server](https://github.com/neo4j/mcp), local tools, and an optional **domain ontology tool**.
 
-Specifically this repo builds a [Text2Cypher](https://graphrag.com/reference/graphrag/text2cypher/) ReAct agent with the [official Neo4j MCP Server](https://github.com/neo4j/mcp). The agent also has extended capabilities by exposing local tools for it to use.
+A conversational AI agent that connects to a Neo4j Movies database and can answer movie-related questions using natural language. Built with LangGraph's implementation of a ReAct agent, the official Neo4j MCP server, and a custom movie recommendations tool.
 
 A conversational AI agent that connects to a Neo4j Movies database and can answer movie-related questions using natural language. Built with LangGraph's implementation of a ReAct agent, the official Neo4j MCP server, and a custom movie recommendations tool.
 
@@ -17,9 +17,11 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 ## Prerequisites
 
 - Python 3.11 or higher
-- Neo4j Aura account or local Neo4j instance with Movies database
+- `uv` (required even if you install with pip — it installs the dependencies and runs the
+  Neo4j MCP server via `uvx`)
+- Neo4j Aura account or local Neo4j instance with Movies database (the demo credentials in
+  `.env.example` work out of the box — see [Configuration](#configuration))
 - OpenAI API key
-- `uv` package manager (recommended) or `pip`
 
 ## Installation
 
@@ -34,8 +36,8 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 
 2. **Clone and setup the project**:
    ```bash
-   git clone neo4j-field/text2cypher-react-agent-example
-   cd text2cypher-react-agent-example
+   git clone <this-repository-url>
+   cd text2cypher-ontology-agent
    ```
 
 3. **Install dependencies**:
@@ -47,8 +49,8 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 
 1. **Clone and setup the project**:
    ```bash
-   git clone neo4j-field/text2cypher-react-agent-example
-   cd text2cypher-react-agent-example
+   git clone <this-repository-url>
+   cd text2cypher-ontology-agent
    ```
 
 2. **Create and activate virtual environment**:
@@ -61,6 +63,10 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
    ```bash
    pip install -r requirements.txt
    ```
+
+   Note: `uv` is still required on this path — the agent launches the Neo4j MCP server with
+   `uvx` at runtime. If you installed with pip, keep `uv` on your PATH
+   (`pip install uv`), or adapt `mcp_server.py` to run the server another way.
 
 ## Configuration
 

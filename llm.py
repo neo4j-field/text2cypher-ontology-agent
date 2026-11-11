@@ -9,9 +9,8 @@ from langchain_openai import ChatOpenAI
 DEFAULT_AGENT_MODEL = "gpt-6-luna"
 
 # Judge one tier above the agent to limit self-preference in the RAGAS scores.
-# Ragas 0.3.9 cannot parse decimal model versions (e.g. "gpt-6.1-terra") when
-# mapping max_tokens -> max_completion_tokens, so use an integer-versioned model.
-# Revisit once ragas is upgraded (see the migration todo in CLAUDE.md).
+# Note: ragas (0.4.x) cannot parse decimal model versions such as "gpt-6.1-terra",
+# so use an integer-versioned model as the judge.
 DEFAULT_JUDGE_MODEL = "gpt-6-sol"
 
 DEFAULT_REASONING_EFFORT = "medium"

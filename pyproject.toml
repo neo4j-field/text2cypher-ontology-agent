@@ -1,11 +1,10 @@
 [project]
-name = "text2cypher-react-agent-example"
+name = "text2cypher-ontology-agent"
 version = "0.1.0"
-description = "A Text2Cypher ReAct agent built with LangGraph and the Neo4j Cypher MCP server."
+description = "A template Text2Cypher ReAct agent with an optional domain ontology tool, built with LangGraph and the official Neo4j MCP server."
 readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
-    "ipykernel>=6.30.1",
     "langchain>=1.5.0",
     "langchain-mcp-adapters>=0.3.2",
     "langchain-openai>=1.7.4",
@@ -14,12 +13,15 @@ dependencies = [
     "openai>=3.0.0",
     "pandas>=2.3.2",
     "pydantic>=2.11.7",
+    "pyyaml>=6.0.2",
+    "python-dotenv>=1.1.0",
     "ragas>=0.4.3",
     "rouge-score>=0.1.2",
 ]
 
 [dependency-groups]
 dev = [
+    "ipykernel>=6.30.1",
     "ruff>=0.12.8",
 ]
 
