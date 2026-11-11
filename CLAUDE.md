@@ -147,6 +147,10 @@ Fork hygiene (audit done — details below)
       workaround (sync `OpenAI()` client) is obsolete after the 0.4 migration: ragas 0.4
       calls `aembed_text()` and requires the async client again
       (`evaluation/components/agent.py`).
+      Also found 2026-11-11: the ragas judge created via `llm_factory` defaults to
+      `max_tokens=1024`, which truncates the claim decomposition on long list-style
+      answers and fails the whole FactualCorrectness score for that question —
+      `build_scorers()` passes `max_tokens=8192`.
 - [x] Fixed stale README eval docs (2026-11-11): points at `evaluation/main.py`, documents
       env-driven config, and the `evals/output/eval_run_<timestamp>_<condition>/` layout.
 - [x] Add CI (2026-11-11): `.github/workflows/ci.yml` runs ruff (check + format --check)
