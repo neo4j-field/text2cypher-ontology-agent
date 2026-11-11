@@ -81,6 +81,11 @@ README / story
 - [x] Card-size table and the "small ontology: preload vs tool" trade-off in the README
       (measured: full card ~400 tokens, 3-entity sub-schema ~250, no-properties ~140).
 - [x] Upstream project linked and credited (README "Credits" section).
+- [x] README split for length (2026-11-11): the main README is now the pitch + quickstart
+      (~140 lines); the full ontology story (comparison table, faithfulness, tool internals,
+      card sizes, pros/cons, adaptation checklist) moved to `docs/ontology.md`, and the eval
+      manual (metrics + caveats, what we measured, output layout) to `docs/evaluation.md`.
+      Keep new deep-dive content in the docs, not the README.
 
 Evidence
 - [x] Add a `WITH_ONTOLOGY` switch (`prompt.py`) and run both conditions
