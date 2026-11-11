@@ -109,6 +109,15 @@ Evidence
       baseline's 2.83 / 3.83 / 20.9 s. Accuracy stays roughly equal (rouge 0.355 vs 0.343,
       relevancy 0.768 vs 0.773, factual 0.273 vs 0.339 but judge-noisy — not led with).
       README now carries these numbers with the honest template-code framing.
+- [x] Full repo review implemented (2026-11-11, commits 1517c13..f3e241b): install story fixed
+      (requirements.txt, uv required, fork identity), one agent shared by the eval
+      (`build_tools`/`build_agent` in `single_file_agent.py`, drifted duplicate tool deleted),
+      driver `with`-blocks, `ONTOLOGY_SOURCE` instead of a model-facing `source`, eval dead
+      code removed, review.ipynb rewritten for the run-directory layout, README learning path
+      (demo-DB note, adaptation checklist, corrected 8-entity numbers, real CSV docs).
+      Verified by a clean A/B pair after the refactor: 16/16 both conditions, zero scoring
+      errors, focus effort 2.17 tool calls (ontology) vs 2.50 (baseline), accuracy roughly
+      equal (rouge 0.349 vs 0.344, relevancy 0.790 vs 0.761) — consistent with the README.
 - [x] Sanity run after the tool/prompt polish (2026-11-11 16:09): 16/16, zero errors,
       `get_ontology` called on all 16 questions; focus effort 2.5 tool calls vs baseline 2.83.
       Absolute latency swings heavily with API load across runs (ontology focus 14–27 s,
