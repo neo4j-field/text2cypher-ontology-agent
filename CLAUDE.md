@@ -14,11 +14,18 @@ helps. Keep `upstream` as a git remote for syncing; the fork's README leads with
   [Neo4j Ontology Graph Specification](https://github.com/neo4j/ontology-graph-spec) format.
 - `tools/get_ontology.py` renders a compact **schema card** (descriptions, aliases, types,
   cardinality, keys) from the ontology, with sub-schema selection via `entities` and optional
-  property detail via `include_properties`. `source="db"` is reserved for
+  property detail via `include_properties`, vocabulary search via `search`. The source is a
+  deployment choice (`ONTOLOGY_SOURCE` env var): `db` is reserved for
   `CALL db.ontology.get()` — ontology persistence in the DBMS is planned for a future Neo4j
   release (2026.12 target, timing TBC). It is not available today; the file source is.
 - The tool is wired into `single_file_agent.py` and `evaluation/main.py`; the system prompt
   tells the agent to prefer it.
+- Consolidation (2026-11-11): `single_file_agent.py` is the single source of the agent —
+  it exposes `build_tools()`/`build_agent()`, which `evaluation/main.py` imports, so the
+  eval always measures the shipped agent. One recommendations tool (the inline copy in
+  `single_file_agent.py`; the drifted `tools/find_movie_recommendations.py` was deleted).
+  Where the ontology is read from is a deployment choice (`ONTOLOGY_SOURCE` env var),
+  not a model-facing parameter.
 
 ## The story: why an ontology on top of `get-schema`
 
@@ -45,9 +52,10 @@ Recommended routing policy (to encode in prompt + tool descriptions): call `get_
 for schema context; call `get-schema` only when the ontology has no match or the question
 needs data-dependent facts (actual values, populated properties, counts).
 
-Size: ~40 tokens per entity in the card (~500 tokens for this 13-entity model). Sub-schema
-selection keeps a call at ~200–500 tokens regardless of ontology size; the full card becomes a
-problem beyond a few hundred entities, which is what the todo items below address.
+Size: ~50 tokens per entity in the card (405 tokens for this 8-entity model: Movie, Person,
+User, Genre + ACTED_IN, DIRECTED, RATED, IN_GENRE). Sub-schema selection keeps a call at
+~150–500 tokens regardless of ontology size; the full card becomes a problem beyond a few
+hundred entities, which is what the todo items below address.
 
 ## Todo
 
@@ -62,7 +70,7 @@ Ontology tool
       labels, relationship types, aliases and descriptions ("performer" → Person).
 - [x] Skip empty `## Nodes` / `## Relationships` headings in the rendered card.
 - [ ] When `db.ontology.get()` ships: verify its output shape (the yield name was assumed),
-      test `source="db"`, remove the "planned for 2026.12" caveat.
+      test `ONTOLOGY_SOURCE=db`, remove the "planned for a future release" caveat.
 
 README / story
 - [x] Benefits section in the README with the comparison table and concrete examples

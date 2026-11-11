@@ -84,6 +84,14 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
    NEO4J_DATABASE=neo4j
    ```
 
+   **Works out of the box:** `.env.example` ships working credentials for the public
+   `recommendations` demo database (demo.neo4jlabs.com), so `cp .env.example .env` plus your
+   OpenAI key is enough to run the agent immediately. If you point at your own instance
+   instead, note that the evaluation questions (`questions.yaml`) assume the
+   *recommendations* dataset — User ratings, production budgets — which a plain
+   `:play movies` graph does not have: load the recommendations dataset, or write your own
+   questions for your own data.
+
 ## Agent Components
 
 ### Core Agent (`single_file_agent.py`)
@@ -144,9 +152,9 @@ written in the [Neo4j Ontology Graph Specification](https://github.com/neo4j/ont
 a public YAML/JSON format for describing graph models. The example ontology for the Movies domain
 lives in [ontology/movies.ontology.yaml](ontology/movies.ontology.yaml).
 
-The tool returns a compact "schema card" instead of the whole document (about 40 tokens per
-entity — roughly 400 for this Movies ontology), and accepts parameters that matter when the
-ontology is too large for the model's context:
+The tool returns a compact "schema card" instead of the whole document (about 50 tokens per
+entity — roughly 400 for this 8-entity Movies ontology), and accepts parameters that matter
+when the ontology is too large for the model's context:
 
 - **`entities`**: build a sub-schema card from only the entities the question needs (matched against labels, relationship types and their aliases), including the relationships between them. This is the pattern to use for large ontologies: the agent fetches only the relevant slice.
 - **`search`**: case-insensitive substring match against labels, relationship types, aliases and descriptions — use it to resolve vocabulary ("performer" finds `Person` via its alias).
@@ -193,7 +201,7 @@ Approximate sizes for this ontology (4 characters ≈ 1 token):
 
 | Call | Size |
 |---|---|
-| Full card (13 entities) | ~400 tokens |
+| Full card (8 entities) | ~400 tokens |
 | Sub-schema, 3 entities | ~250 tokens |
 | Sub-schema, 3 entities, no properties | ~140 tokens |
 
@@ -261,7 +269,22 @@ as things to evaluate for your own domain.
 - **The tooling is early.** The specification is new (1.1.0), and reading the ontology from the
   database (`source="db"`) is not available yet — today it is a file you point the agent at.
 
-To adapt this to your own domain, write your ontology in the [specification format](https://github.com/neo4j/ontology-graph-spec) (validate it against the published JSON Schema), point `ONTOLOGY_FILE` at it, and the agent picks it up — no other code changes needed.
+### Adapting this to your own domain
+
+The template is Movies-specific in four places. To adapt it:
+
+1. **The ontology** — write your own in the
+   [specification format](https://github.com/neo4j/ontology-graph-spec) and validate it
+   against the published JSON Schema (`uv run python tests/smoke_test.py` shows how, and
+   validates `ontology/movies.ontology.yaml` against it). Point `ONTOLOGY_FILE` at it;
+   no other code changes are needed for the ontology itself.
+2. **The system prompt** — `prompt.py` is written for movie questions; rewrite the
+   domain-specific parts for your data.
+3. **The custom tool** — `find_movie_recommendations` in `single_file_agent.py` is a
+   Movies demo; replace it with tools for your domain, or remove it.
+4. **The eval questions** — write your own questions and reference answers in
+   `questions.yaml`, then run both conditions to measure what the ontology changes on
+   *your* questions.
 
 The evaluation suite makes it easy to measure the difference: run it once with `WITH_ONTOLOGY=true` (default) and once with `WITH_ONTOLOGY=false`, then compare the results. Results land in `evals/output/eval_run_<timestamp>_<ontology|no_ontology>/`.
 
@@ -319,35 +342,42 @@ The evaluation suite includes three RAGAS metrics:
    ```
 4. The results are written to `evals/output/eval_run_<timestamp>_<ontology|no_ontology>/`:
    `metadata.csv`, `agent_response.csv`, `failed_response.csv` and a `report.txt`
+   (see [Eval CSV Structure](#eval-csv-structure) below)
 5. View and analyze the results with [review.ipynb](review.ipynb)
+6. To regenerate `report.txt` for an existing run:
+   ```bash
+   make generate-report-uv  # most recent run
+   make generate-report-uv run=eval_run_2026-11-11_16-09-01_ontology  # a specific run
+   ```
 
 **NOTE**: The evaluation script may take awhile to run depending on the number of questions and length of resulting conversations
 
 ### Eval CSV Structure
 
-The resulting evaluation CSV contains the following columns:
+Each run writes three CSV files to `evals/output/eval_run_<timestamp>_<ontology|no_ontology>/`:
 
-**Question & Answer Data:**
-* `question_id`: str - Unique identifier for the question
-* `question`: str - The user's input question
-* `expected_answer`: str - Reference answer for comparison
-* `agent_final_answer`: Optional[str] - The agent's response
+**`metadata.csv`** — how the agent answered each question:
 
-**Agent Performance Metrics:**
-* `generated_cypher`: list[ReadNeo4jCypherToolInput] - All Cypher queries generated
-* `model`: str - LLM model used
-* `available_tools`: list[str] - Tools available to the agent
-* `called_tools`: list[str] - Tools actually invoked
-* `num_messages`: Optional[int] - Total messages in conversation
-* `num_llm_calls`: Optional[int] - Number of LLM invocations
-* `num_tool_calls`: Optional[int] - Number of tool invocations
-* `response_time`: Optional[float] - Time to complete question (seconds)
-* `error`: Optional[str] - Error message if evaluation failed
+* `question_id`, `question`, `expected_answer`, `agent_final_answer`
+* `generated_cypher`: the Cypher queries generated
+* `model`: the LLM model used
+* `available_tools`: the tool names available to the agent
+* `called_tools`: the tool calls actually invoked (name + args)
+* `num_messages`, `num_llm_calls`, `num_tool_calls`: conversation statistics
+* `response_time`: seconds to complete the question
+* `error`: error message if the run failed
 
-**RAGAS Quality Metrics:**
-* `rouge_f1_score`: Optional[float] - Rouge-L F1 score
-* `factual_correctness_f1_score`: Optional[float] - Factual correctness F1 score
-* `answer_relevancy_score`: Optional[float] - Answer relevancy score
+**`agent_response.csv`** — the quality of each answer (RAGAS metrics):
+
+* `question_id`, `question`, `expected_answer`, `agent_final_answer`, `model`
+* `rouge_f1_score`: Rouge-L F1 score
+* `factual_correctness_f1_score`: Factual correctness F1 score
+* `answer_relevancy_score`: Answer relevancy score
+* `error`: error message if scoring failed
+
+**`failed_response.csv`** — questions that crashed the evaluation harness:
+
+* `question_id`, `question`, `expected_answer`, `error`
 
 ## Development
 
@@ -355,6 +385,16 @@ The resulting evaluation CSV contains the following columns:
 ```bash
 make format
 ```
+
+### Smoke Tests
+```bash
+uv run python tests/smoke_test.py
+```
+Runs offline checks of the ontology tool (cards, sub-schemas, `search`, error messages) and
+validates the ontology YAML against the published JSON Schema — no database or API key
+needed. This is also the pattern to copy for validating your own ontology file.
+
+CI (`.github/workflows/ci.yml`) runs ruff and this smoke test on every push.
 
 
 
