@@ -22,6 +22,7 @@ from evaluation.components.generate_report import create_report_from_dataframes
 from evaluation.models import AgentResponseTableRecord, FailedResponseTableRecord, MetadataTableRecord, QuestionRecord
 from prompt import get_movies_system_prompt
 from tools.find_movie_recommendations import find_movie_recommendations_tool
+from tools.get_ontology import get_ontology_tool
 from utils import get_questions_from_yaml, pre_model_hook
 
 if load_dotenv():
@@ -230,6 +231,7 @@ async def main():
 
             # We can also add non-mcp tools for our agent to use
             allowed_tools.append(find_movie_recommendations_tool)
+            allowed_tools.append(get_ontology_tool)
 
             prompt = get_movies_system_prompt()
 

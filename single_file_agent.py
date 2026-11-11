@@ -19,6 +19,8 @@ from mcp.client.stdio import stdio_client
 from neo4j import GraphDatabase, RoutingControl
 from pydantic import BaseModel, Field
 
+from tools.get_ontology import get_ontology_tool
+
 if load_dotenv():
     print("Loaded .env file")
 else:
@@ -109,6 +111,7 @@ CONFIG = {"configurable": {"thread_id": "1"}}
 SYSTEM_PROMPT = """You are a Neo4j expert that knows how to write Cypher queries to address movie questions.
 As a Cypher expert, when writing queries:
 * You must always ensure you have the data model schema to inform your queries
+* Prefer the `get_ontology` tool for schema context: it tells you what labels, relationship types and properties mean (descriptions, aliases, cardinality), which `get_neo4j_schema` does not. Pass `entities` to get only the relevant part of the ontology.
 * If an error is returned from the database, you may refactor your query or ask the user to provide additional information
 * If an empty result is returned, use your best judgement to determine if the query is correct.
 
@@ -203,6 +206,7 @@ async def main():
 
             # We can also add non-mcp tools for our agent to use
             allowed_tools.append(find_movie_recommendations_tool)
+            allowed_tools.append(get_ontology_tool)
 
             # Create and run the agent
             agent = create_react_agent(

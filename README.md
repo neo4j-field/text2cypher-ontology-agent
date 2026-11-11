@@ -11,6 +11,7 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 - **Natural Language to Cypher**: Ask questions in plain English and get answers from your Neo4j database
 - **ReAct Agent Pattern**: Uses reasoning and acting loops for complex reasoning
 - **Schema-Aware**: Automatically retrieves and uses database schema for accurate query generation
+- **Ontology-Aware**: A local tool exposes the domain ontology (meanings, aliases, cardinality) alongside the raw schema
 - **Interactive CLI**: Chat-based interface for easy interaction
 
 ## Prerequisites
@@ -83,6 +84,7 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 - **LangGraph ReAct Agent**: Implements reasoning and acting loops for complex queries
 - **Neo4j Cypher MCP Server**: Provides schema introspection and query execution
 - **Custom Recommendations Tool**: Custom tool for movie recs
+- **Ontology Tool**: Custom tool exposing the domain ontology to the agent
 - **Interactive CLI**: Command-line chat interface
 
 ### Key Tools Available to the Agent
@@ -90,6 +92,25 @@ A conversational AI agent that connects to a Neo4j Movies database and can answe
 1. **`get_neo4j_schema`**: Retrieves database schema for informed query writing
 2. **`read_neo4j_cypher`**: Executes read-only Cypher queries against the database  
 3. **`find_movie_recommendations`**: Custom recommendation engine that finds movies liked by users who also enjoyed a target movie
+4. **`get_ontology`**: Retrieves the domain ontology — what labels, relationship types and properties *mean* — as a compact schema card (see below)
+
+## Ontology-aware Text2Cypher
+
+The schema from `get_neo4j_schema` tells the model which labels, relationship types and properties exist, but not what they mean: it has no descriptions, no aliases ("actor" is a `Person`), no cardinality ("every movie has at least one actor") and no allowed values.
+
+The `get_ontology` tool ([tools/get_ontology.py](tools/get_ontology.py)) fills that gap by exposing a document written in the [Neo4j Ontology Graph Specification](https://github.com/neo4j/ontology-graph-spec) — a public YAML/JSON format for describing graph models. The example ontology for the Movies domain lives in [ontology/movies.ontology.yaml](ontology/movies.ontology.yaml).
+
+The tool returns a compact "schema card" instead of the whole document, and accepts parameters that matter when the ontology is too large for the model's context:
+
+- **`entities`**: build a sub-schema card from only the entities the question needs (matched against labels, relationship types and their aliases), including the relationships between them. This is the pattern to use for large ontologies: the agent fetches only the relevant slice.
+- **`include_properties`**: omit property details to get an even smaller card.
+- **`source`**: where to read the ontology from:
+  - `source="file"` (default) reads a YAML or JSON document from disk, `ONTOLOGY_FILE` in `.env` (defaults to `ontology/movies.ontology.yaml`).
+  - `source="db"` reads the ontology persisted in the database itself with `CALL db.ontology.get()`. Ontology persistence in the DBMS is planned for Neo4j 2026.12 (self-managed & Aura); until your database supports it, use `source="file"` — for very large ontologies, store the document as data in a separate database and select sub-schemas with `entities`.
+
+To adapt this to your own domain, write your ontology in the [specification format](https://github.com/neo4j/ontology-graph-spec) (validate it against the published JSON Schema), point `ONTOLOGY_FILE` at it, and the agent picks it up — no other code changes needed.
+
+The evaluation suite makes it easy to measure the difference: add or remove `get_ontology` from the tools in `evaluation/main.py`, run `make run-eval`, and compare the RAGAS scores with and without ontology context.
 
 ## Running the Agent
 

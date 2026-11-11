@@ -9,6 +9,7 @@
 * Refactor evaluation workflow to also generate a report `.txt` file at the end of the run
 
 ### Added
+* Add `get_ontology` tool exposing a domain ontology (Neo4j Ontology Graph Specification) to the agent, with sub-schema selection for large ontologies
 * Add RAGAS metrics to evaluation workflow - `rouge_f1_score`, `factual_correctness_f1_score`, `answer_relevancy_score`
 
 ## v0.1.0
