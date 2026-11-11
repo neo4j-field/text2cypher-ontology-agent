@@ -25,7 +25,10 @@ def build_scorers() -> tuple[RougeScore, FactualCorrectness, AnswerRelevancy]:
     """
 
     client = AsyncOpenAI()
-    judge = llm_factory(get_judge_model(), client=client, reasoning_effort="none")
+    # max_tokens matters: the default (1024) truncates the judge's claim
+    # decomposition on long, list-style answers, which fails the whole
+    # FactualCorrectness score for that question.
+    judge = llm_factory(get_judge_model(), client=client, reasoning_effort="none", max_tokens=8192)
     embeddings = embedding_factory(
         "openai",
         model="text-embedding-3-small",
