@@ -47,7 +47,7 @@ domain — is in [docs/ontology.md](docs/ontology.md).
 
 2. **Clone and setup the project**:
    ```bash
-   git clone <this-repository-url>
+   git clone https://github.com/neo4j-field/text2cypher-ontology-agent.git
    cd text2cypher-ontology-agent
    ```
 
