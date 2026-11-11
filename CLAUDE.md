@@ -9,7 +9,10 @@ helps. Keep `upstream` as a git remote for syncing; the fork's README leads with
 
 ## Current state
 
-- Branch `ontology-tool` (local, not pushed): the ontology tool and its wiring.
+- Published 2026-11-11 at https://github.com/neo4j-field/text2cypher-ontology-agent —
+  `origin` points there (branch `main`, formerly `ontology-tool`), `upstream` points at
+  [neo4j-field/text2cypher-react-agent-example](https://github.com/neo4j-field/text2cypher-react-agent-example)
+  for syncing. The README's clone URL points at the published repo.
 - The ontology is a file (`ontology/movies.ontology.yaml`) written in the
   [Neo4j Ontology Graph Specification](https://github.com/neo4j/ontology-graph-spec) format.
 - `tools/get_ontology.py` renders a compact **schema card** (descriptions, aliases, types,
